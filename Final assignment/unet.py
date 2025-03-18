@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 
-class UNet(nn.Module):
+class Model(nn.Module):
     """ 
     A simple U-Net architecture for image segmentation.
     Based on the U-Net architecture from the original paper:
@@ -11,7 +11,7 @@ class UNet(nn.Module):
     """
     def __init__(self, in_channels=3, n_classes=1):
         
-        super(UNet, self).__init__()
+        super(Model, self).__init__()
 
         self.inc = (DoubleConv(in_channels, 64))
         self.down1 = (Down(64, 128))
