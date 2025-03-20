@@ -160,11 +160,13 @@ def main(args):
 
     criterion = lambda output, target: nn.CrossEntropyLoss(ignore_index=255)(output, target) + dice_loss(output, target)
 
-
+    
     # Define the optimizer
+    from torch.optim.lr_scheduler import ReduceLROnPlateau
     optimizer = AdamW(model.parameters(), lr=args.lr)
 #scheduler toegevoed voor betere learningrate
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
+   # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=5, factor=0.5, verbose=True)
 
     # Training loop
     best_valid_loss = float('inf')
@@ -246,6 +248,19 @@ def main(args):
            # }, step=(epoch + 1) * len(train_dataloader) - 1)
 
             valid_loss = sum(losses) / len(losses)
+            #early stopping to prevent overfitting
+            # Early stopping criteria
+            if valid_loss < best_valid_loss:
+                best_valid_loss = valid_loss
+                patience_counter = 0  # Reset patience counter als er verbetering is
+            else:
+                patience_counter += 1  # Verhoog patience als valid_loss niet verbetert
+
+            # Stop de training als valid_loss niet meer verbetert na X epochs
+            if patience_counter >= 10:  # Stop na 10 epochs zonder verbetering
+                print("Early stopping triggered! Training stopped.")
+                break
+
 # scheduler toegevoegd voor betere learning rate 
             scheduler.step(valid_loss)
 
