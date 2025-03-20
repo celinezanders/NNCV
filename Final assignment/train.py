@@ -153,7 +153,10 @@ def main(args):
         #intersection = torch.sum(pred * target)
         #union = torch.sum(pred) + torch.sum(target)
 
-        return 1 - (2. * intersection + smooth) / (union + smooth)
+        #return 1 - (2. * intersection + smooth) / (union + smooth)
+
+        dice = (2. * intersection + smooth) / (union + smooth)
+        return 1 - dice.mean()
 
     criterion = lambda output, target: nn.CrossEntropyLoss(ignore_index=255)(output, target) + dice_loss(output, target)
 
