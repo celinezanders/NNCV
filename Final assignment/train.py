@@ -145,8 +145,7 @@ def main(args):
 # I am adding the dice loss to the loss function
     def dice_loss(pred, target, smooth=1e-6):
         pred = torch.softmax(pred, dim=1)  # softmax over classes
-        pred = pred.argmax(dim=1)  # make class prediciton
-
+        
         intersection = torch.sum(pred * target)
         union = torch.sum(pred) + torch.sum(target)
 
@@ -158,7 +157,7 @@ def main(args):
     # Define the optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr)
 #scheduler toegevoed voor betere learningrate
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.5)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
 
     # Training loop
     best_valid_loss = float('inf')
@@ -174,6 +173,7 @@ def main(args):
             images, labels = images.to(device), labels.to(device)
 
             labels = labels.long().squeeze(1)  # Remove channel dimension
+            labels[labels == 255] = 0
 
             optimizer.zero_grad()
 # hier voeg ik Mixed Precision Training toe            
@@ -184,7 +184,7 @@ def main(args):
             with torch.amp.autocast("cuda"): # Zet automatische mixed precision aan
                 outputs = model(images)  
                 loss = criterion(outputs, labels) 
-                loss = torch.clamp(loss, min=-1, max=1)  #clamp toegevoegd om extreme waarde te voorkomen
+                
 
             scaler.scale(loss).backward()  # Schaal de gradiënten om stabiliteit te garanderen
             scaler.step(optimizer)  # Update de optimizer
@@ -206,10 +206,11 @@ def main(args):
                 images, labels = images.to(device), labels.to(device)
 
                 labels = labels.long().squeeze(1)  # Remove channel dimension
+                labels[labels == 255] = 0
 
                 outputs = model(images)
                 loss = criterion(outputs, labels)
-                loss = torch.clamp(loss, min=-1, max=1) #clamping om extreme waarde te voorkomen
+                
                 losses.append(loss.item())
             
                 if i == 0:
