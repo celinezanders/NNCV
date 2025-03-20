@@ -145,9 +145,13 @@ def main(args):
 # I am adding the dice loss to the loss function
     def dice_loss(pred, target, smooth=1e-6):
         pred = torch.softmax(pred, dim=1)  # softmax over classes
-        
-        intersection = torch.sum(pred * target)
-        union = torch.sum(pred) + torch.sum(target)
+        target_one_hot = torch.nn.functional.one_hot(target, num_classes=pred.shape[1])  # [batch, H, W, num_classes]
+        target_one_hot = target_one_hot.permute(0, 3, 1, 2).float()  # Maak het [batch, num_classes, H, W]
+
+        intersection = torch.sum(pred * target_one_hot, dim=(2, 3))  # Som over hoogte/breedte
+        union = torch.sum(pred, dim=(2, 3)) + torch.sum(target_one_hot, dim=(2, 3))  # Som over hoogte/breedte
+        #intersection = torch.sum(pred * target)
+        #union = torch.sum(pred) + torch.sum(target)
 
         return 1 - (2. * intersection + smooth) / (union + smooth)
 
