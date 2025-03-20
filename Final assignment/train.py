@@ -187,7 +187,7 @@ def main(args):
 
             optimizer.zero_grad()
             outputs = model(images)
-            loss = criterion(outputs, labels)
+            loss = criterion(outputs['out'], labels) #aangepast anders error op snellius
             loss.backward()
             optimizer.step()
 
@@ -209,7 +209,7 @@ def main(args):
                 labels = labels.long().squeeze(1)  # Remove channel dimension
 
                 outputs = model(images)
-                loss = criterion(outputs, labels)
+                loss = criterion(outputs['out'], labels) #aangepast anders error in snellius
                 losses.append(loss.item())
             
                 if i == 0:
