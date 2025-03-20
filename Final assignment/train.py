@@ -181,9 +181,10 @@ def main(args):
             #loss = criterion(outputs, labels)
             #loss.backward()
             #optimizer.step()
-            with torch.cuda.amp.autocast():  # Zet automatische mixed precision aan
+            with torch.amp.autocast("cuda"): # Zet automatische mixed precision aan
                 outputs = model(images)  
-                loss = criterion(outputs, labels)  
+                loss = criterion(outputs, labels) 
+                loss = torch.clamp(loss, min=-1, max=1)  #clamp toegevoegd om extreme waarde te voorkomen
 
             scaler.scale(loss).backward()  # Schaal de gradiënten om stabiliteit te garanderen
             scaler.step(optimizer)  # Update de optimizer
@@ -208,6 +209,7 @@ def main(args):
 
                 outputs = model(images)
                 loss = criterion(outputs, labels)
+                loss = torch.clamp(loss, min=-1, max=1) #clamping om extreme waarde te voorkomen
                 losses.append(loss.item())
             
                 if i == 0:
