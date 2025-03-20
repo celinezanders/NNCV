@@ -32,6 +32,9 @@ from torchvision.transforms.v2 import (
 
 from unet import Model
 
+#toevoegen voor mixed precision training
+scaler = torch.amp.GradScaler("cuda")
+
 
 # Mapping class IDs to train IDs
 id_to_trainid = {cls.id: cls.train_id for cls in Cityscapes.classes}
@@ -137,7 +140,20 @@ def main(args):
     ).to(device)
 
     # Define the loss function
-    criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
+    #criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
+
+# I am adding the dice loss to the loss function
+    def dice_loss(pred, target, smooth=1e-6):
+        pred = torch.softmax(pred, dim=1)  # softmax over classes
+        pred = pred.argmax(dim=1)  # make class prediciton
+
+        intersection = torch.sum(pred * target)
+        union = torch.sum(pred) + torch.sum(target)
+
+        return 1 - (2. * intersection + smooth) / (union + smooth)
+
+    criterion = lambda output, target: nn.CrossEntropyLoss(ignore_index=255)(output, target) + dice_loss(output, target)
+
 
     # Define the optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr)
@@ -158,10 +174,18 @@ def main(args):
             labels = labels.long().squeeze(1)  # Remove channel dimension
 
             optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+# hier voeg ik Mixed Precision Training toe            
+            #outputs = model(images)
+            #loss = criterion(outputs, labels)
+            #loss.backward()
+            #optimizer.step()
+            with torch.cuda.amp.autocast():  # Zet automatische mixed precision aan
+                outputs = model(images)  
+                loss = criterion(outputs, labels)  
+
+            scaler.scale(loss).backward()  # Schaal de gradiënten om stabiliteit te garanderen
+            scaler.step(optimizer)  # Update de optimizer
+            scaler.update()  # Pas de scaler aan voor de volgende iteratie
 
             wandb.log({
                 "train_loss": loss.item(),
