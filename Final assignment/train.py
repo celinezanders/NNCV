@@ -157,6 +157,8 @@ def main(args):
 
     # Define the optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr)
+#scheduler toegevoed voor betere learningrate
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.5)
 
     # Training loop
     best_valid_loss = float('inf')
@@ -234,6 +236,9 @@ def main(args):
            # }, step=(epoch + 1) * len(train_dataloader) - 1)
 
             valid_loss = sum(losses) / len(losses)
+# scheduler toegevoegd voor betere learning rate 
+            scheduler.step(valid_loss)
+
             #hier dice formule toevoegen
             predictions = outputs.softmax(1).argmax(1) # logits naar klassenvoorspellingen
             intersection = torch.sum((predictions == labels) * (labels != 255)) #negeer index 255
