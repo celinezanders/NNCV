@@ -28,9 +28,18 @@ from torchvision.transforms.v2 import (
     Resize,
     ToImage,
     ToDtype,
+    RandomHorizontalFlip,
+    ColorJitter,
+    RandomAffine
 )
+# RandomHorizontalFlip, ColorJitter en RandomAffine toegevoegd
 
-from unet import Model
+#dit haal ik even weg
+#from unet import Model
+
+#dit doe ik even ipv dat
+from torchvision.models.segmentation import deeplabv3_resnet101
+
 
 
 # Mapping class IDs to train IDs
@@ -59,9 +68,9 @@ def get_args_parser():
 
     parser = ArgumentParser("Training script for a PyTorch U-Net model")
     parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
-    parser.add_argument("--batch-size", type=int, default=64, help="Training batch size")
-    parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
-    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
+    parser.add_argument("--batch-size", type=int, default=16, help="Training batch size") #default was 64, reduced it to reduce memory usage
+    parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs") #default 10, increased it so it trains the model longer to improve segmentation performance
+    parser.add_argument("--lr", type=float, default=0.0001, help="Learning rate") # default 0.001, reduced it so it stabilizes training, prevent overshooting
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
@@ -90,14 +99,14 @@ def main(args):
     # Define the device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Define the transforms to apply to the data
+    #Define the transforms to apply to the data
     transform = Compose([
         ToImage(),
         Resize((256, 256)),
         ToDtype(torch.float32, scale=True),
         Normalize((0.5,), (0.5,)),
     ])
-
+  
     # Load the dataset and make a split for training and validation
     train_dataset = Cityscapes(
         args.data_dir, 
@@ -130,17 +139,36 @@ def main(args):
         num_workers=args.num_workers
     )
 
+# het model is nu in U-net, ik ga het veranderen naar deeplabv3
     # Define the model
-    model = Model(
-        in_channels=3,  # RGB images
-        n_classes=19,  # 19 classes in the Cityscapes dataset
-    ).to(device)
+   # model = Model(
+    #    in_channels=3,  # RGB images
+    #    n_classes=19,  # 19 classes in the Cityscapes dataset
+    #).to(device)
+
+#define model
+    model = deeplabv3_resnet101(pretrained=True) # het laad de DeepLabV3+ met REsNet101
+    model.classifier[4] = torch.nn.Conv2d(256, 19, kernel_size=1) # output for 19 classes
+    model.aux_classifier = None # auxiliary classifier removed for simplicity
+    model = model.to(device)
+
+    #dit heb ik ook toegevoegd
+    #freeze backbone layers to speed up the training
+    for param in model.backbone.parameters():
+        param.requires_grad = False # freeze the backbone ResNet-101 layers
+    #only train the classifier head
+    for param in model.classifier.parameters():
+        param.requires_grad = True
 
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
 
     # Define the optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr)
+#voeg sheduler toe
+   # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.5)
+   # scheduler.step(valid_loss)
+
 
     # Training loop
     best_valid_loss = float('inf')
@@ -185,6 +213,7 @@ def main(args):
                 losses.append(loss.item())
             
                 if i == 0:
+                    #hier dice toevooegen
                     predictions = outputs.softmax(1).argmax(1)
 
                     predictions = predictions.unsqueeze(1)
@@ -205,8 +234,15 @@ def main(args):
                     }, step=(epoch + 1) * len(train_dataloader) - 1)
             
             valid_loss = sum(losses) / len(losses)
+            #hier dice formule toevoegen
+            predictions = outputs.softmax(1).argmax(1) # logits naar klassenvoorspellingen
+            intersection = torch.sum((predictions == labels) * (labels != 255)) #negeer index 255
+            union = torch.sum((predictions!= 255)) + torch.sum((labels != 255))
+            dice_score = (2.0 * intersection) / union if union >0 else 1.0 # zodat er geen deling door nul gebeurt
+
             wandb.log({
-                "valid_loss": valid_loss
+                "valid_loss": valid_loss,
+                "dice_score": dice_score.item()
             }, step=(epoch + 1) * len(train_dataloader) - 1)
 
             if valid_loss < best_valid_loss:
