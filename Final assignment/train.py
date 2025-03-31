@@ -98,7 +98,10 @@ def main(args):
         ToImage(),
         Resize((256, 256)),
         ToDtype(torch.float32, scale=True),
-        Normalize((0.5,), (0.5,)),
+        #Normalize((0.5,), (0.5,)),
+        # above it treated the RGB in grayscale, below as RGB
+        Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+
     ])
 
     # Load the dataset and make a split for training and validation
@@ -158,12 +161,12 @@ def main(args):
         dice = (2. * intersection + smooth) / (union + smooth)
         return 1 - dice.mean()
 
-    criterion = lambda output, target: nn.CrossEntropyLoss(ignore_index=255)(output, target) + dice_loss(output, target)
-
+    criterion = lambda output, target: nn.CrossEntropyLoss(ignore_index=255)(output, target) + 0.3*dice_loss(output, target)
+#added 0.3* to dice_loss to reduce the weight on dice which can make the loss too sensitive
     
     # Define the optimizer
     from torch.optim.lr_scheduler import ReduceLROnPlateau
-    optimizer = AdamW(model.parameters(), lr=args.lr)
+    optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
 #scheduler toegevoed voor betere learningrate
    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=5, factor=0.5, verbose=True)
