@@ -29,6 +29,7 @@ from torchvision.transforms.v2 import (
     ToImage,
     ToDtype,
 )
+#dit word niet ingeleverd alleen resultaat van weight dinges
 
 from unet import Model
 

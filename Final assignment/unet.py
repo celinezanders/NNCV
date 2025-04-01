@@ -1,6 +1,9 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
+
+#deze nog naar kijken dit word ingeleverd
 
 class Model(nn.Module):
     """ 
@@ -17,8 +20,8 @@ class Model(nn.Module):
         self.down1 = (Down(64, 128))
         self.down2 = (Down(128, 256))
         self.down3 = (Down(256, 512))
-        self.down4 = (Down(512, 512))
-        self.up1 = (Up(1024, 256))
+        self.down4 = (Down(512, 1024)) # veranderd naar 1024 -> meer filters dus krachtiger
+        self.up1 = (Up(1024 + 512, 512)) # up krijgt nu 1024 van encoder en 512 van skip connection
         self.up2 = (Up(512, 128))
         self.up3 = (Up(256, 64))
         self.up4 = (Up(128, 64))
@@ -40,8 +43,8 @@ class Model(nn.Module):
         
 
 class DoubleConv(nn.Module):
-    """(convolution => [BN] => ReLU) * 2"""
-
+    #"""(convolution => [BN] => ReLU) * 2"""
+    """(convolution => [BN] => ReLU) * 2 with dropout"""
     def __init__(self, in_channels, out_channels, mid_channels=None):
         super().__init__()
         if not mid_channels:
@@ -50,6 +53,7 @@ class DoubleConv(nn.Module):
             nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(mid_channels),
             nn.ReLU(inplace=True),
+            nn.Dropout(0.1), #dit toegevoegd om het per layer te contorleren
             nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True)
@@ -78,11 +82,26 @@ class Up(nn.Module):
 
     def __init__(self, in_channels, out_channels, bilinear=True):
         super().__init__()
-        self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+       # self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+       # self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
+      
+#dit aangepast hier kist het tussen bilinear upsampling (geen parameters) of een transposed convulution (wel leerbare parameters)
+        if bilinear:
+            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        else:
+            self.up = nn.ConvTranspose2d(in_channels // 2, in_channels // 2, kernel_size=2, stride=2)
+
         self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
-        
+
     def forward(self, x1, x2):
         x1 = self.up(x1)
+
+#dit toegevoegd voor size mathcing met afrondingen
+        diffY = x2.size()[2] - x1.size()[2]
+        diffX = x2.size()[3] - x1.size()[3]
+        x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
+                        diffY // 2, diffY - diffY // 2])
+        
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
 
