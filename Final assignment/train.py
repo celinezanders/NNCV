@@ -18,6 +18,8 @@ from argparse import ArgumentParser
 import wandb
 import torch
 import torch.nn as nn
+#toegevoegd
+import time
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
@@ -30,7 +32,7 @@ from torchvision.transforms.v2 import (
     ToDtype,
 )
 #toegevoegd om effiencity te zien met flops
-from ptflops import get_model_complexity_info
+#from ptflops import get_model_complexity_info
 
 #dit word niet ingeleverd alleen resultaat van weight dinges
 
@@ -225,12 +227,26 @@ def main(args):
             scaler.step(optimizer)  # Update de optimizer
             scaler.update()  # Pas de scaler aan voor de volgende iteratie
 
+#log GPu memory usage
+            wandb.log({
+                "gpu_memory_allocated": torch.cuda.memory_allocated() / (1024 ** 2),  # In MB
+                "gpu_memory_cached": torch.cuda.memory_reserved() / (1024 ** 2),  # In MB
+            })
+
             wandb.log({
                 "train_loss": loss.item(),
                 "learning_rate": optimizer.param_groups[0]['lr'],
                 "epoch": epoch + 1,
             }, step=epoch * len(train_dataloader) + i)
             
+#epoch time
+#       
+        start_epoch_time = time.time()  # Start tijd voor epoch
+        epoch_time = time.time() - start_epoch_time  # Bereken tijd na het trainen van de epoch
+        wandb.log({
+            "epoch_time": epoch_time,
+        })
+    
         # Validation
         model.eval()
         with torch.no_grad():
