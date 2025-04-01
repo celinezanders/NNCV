@@ -22,9 +22,9 @@ class Model(nn.Module):
         self.down3 = (Down(256, 512))
         self.down4 = (Down(512, 1024)) # veranderd naar 1024 -> meer filters dus krachtiger
         self.up1 = (Up(1024 + 512, 512)) # up krijgt nu 1024 van encoder en 512 van skip connection
-        self.up2 = (Up(512, 128))
-        self.up3 = (Up(256, 64))
-        self.up4 = (Up(128, 64))
+        self.up2 = (Up(512 + 256, 256))
+        self.up3 = (Up(256 + 128, 128))
+        self.up4 = (Up(128 + 64, 64))
         self.outc = (OutConv(64, n_classes))
 
     def forward(self, x):
