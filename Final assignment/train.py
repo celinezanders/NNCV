@@ -30,7 +30,7 @@ from torchvision.transforms.v2 import (
     ToDtype,
 )
 #toegevoegd om effiencity te zien met flops
-from ptflops import get_model_complexity_info
+#from ptflops import get_model_complexity_info
 
 #dit word niet ingeleverd alleen resultaat van weight dinges
 
