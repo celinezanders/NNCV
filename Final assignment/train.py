@@ -146,20 +146,21 @@ def main(args):
         n_classes=19,  # 19 classes in the Cityscapes dataset
     ).to(device)
 
-    # Log FLOPs and parameters for Efficiency benchmark
-    with torch.cuda.device(0 if torch.cuda.is_available() else -1):  # Controleer of er een GPU beschikbaar is
-        macs, params = get_model_complexity_info(
-            model, 
-            (3, 256, 256),  # De inputshape voor jouw model (3 kanaal, 256x256 afbeelding)
-            as_strings=True,  # Log als strings om gemakkelijk af te lezen
-            print_per_layer_stat=False,  # Geen gedetailleerde layer-statistieken
-            verbose=False
-        )
+   # # Log FLOPs and parameters for Efficiency benchmark
+    #with torch.cuda.device(0 if torch.cuda.is_available() else -1):  # Controleer of er een GPU beschikbaar is
+     #   macs, params = get_model_complexity_info(
+      #      model, 
+       #     (3, 256, 256),  # De inputshape voor jouw model (3 kanaal, 256x256 afbeelding)
+        #    as_strings=True,  # Log als strings om gemakkelijk af te lezen
+         #   print_per_layer_stat=False,  # Geen gedetailleerde layer-statistieken
+          #  verbose=False
+        #)
 
-    wandb.log({
-        "efficiency/FLOPs (MACs)": macs,
-        "efficiency/Parameters": params,
-    })
+
+    #wandb.log({
+    #    "efficiency/FLOPs (MACs)": macs,
+    #    "efficiency/Parameters": params,
+    #})
 
 
 
