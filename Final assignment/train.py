@@ -29,6 +29,9 @@ from torchvision.transforms.v2 import (
     ToImage,
     ToDtype,
 )
+#toegevoegd om effiencity te zien met flops
+from ptflops import get_model_complexity_info
+
 #dit word niet ingeleverd alleen resultaat van weight dinges
 
 from unet import Model
@@ -65,7 +68,7 @@ def get_args_parser():
     parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
     parser.add_argument("--batch-size", type=int, default=64, help="Training batch size")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
-    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=0.0005, help="Learning rate")
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
@@ -142,6 +145,24 @@ def main(args):
         in_channels=3,  # RGB images
         n_classes=19,  # 19 classes in the Cityscapes dataset
     ).to(device)
+
+    # Log FLOPs and parameters for Efficiency benchmark
+    with torch.cuda.device(0 if torch.cuda.is_available() else -1):  # Controleer of er een GPU beschikbaar is
+        macs, params = get_model_complexity_info(
+            model, 
+            (3, 256, 256),  # De inputshape voor jouw model (3 kanaal, 256x256 afbeelding)
+            as_strings=True,  # Log als strings om gemakkelijk af te lezen
+            print_per_layer_stat=False,  # Geen gedetailleerde layer-statistieken
+            verbose=False
+        )
+
+    wandb.log({
+        "efficiency/FLOPs (MACs)": macs,
+        "efficiency/Parameters": params,
+    })
+
+
+
 
     # Define the loss function
     #criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
