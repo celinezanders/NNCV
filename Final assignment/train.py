@@ -1,16 +1,22 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import os
 from argparse import ArgumentParser
 import wandb
+import torch
+import torch.nn as nn
 import time
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
 from torchvision.utils import make_grid
-from torchvision.transforms.v2 import Compose, Normalize, Resize, ToImage, ToDtype
-from unet import Model
+from torchvision.transforms.v2 import (
+    Compose,
+    Normalize,
+    Resize,
+    ToImage,
+    ToDtype,
+)
+
+from unet import Model  # Import Model from unet.py
 
 # Adding mixed precision training support
 scaler = torch.amp.GradScaler("cuda")
@@ -19,21 +25,6 @@ scaler = torch.amp.GradScaler("cuda")
 id_to_trainid = {cls.id: cls.train_id for cls in Cityscapes.classes}
 def convert_to_train_id(label_img: torch.Tensor) -> torch.Tensor:
     return label_img.apply_(lambda x: id_to_trainid[x])
-
-# Mapping train IDs to color
-train_id_to_color = {cls.train_id: cls.color for cls in Cityscapes.classes if cls.train_id != 255}
-train_id_to_color[255] = (0, 0, 0)  # Assign black to ignored labels
-
-def convert_train_id_to_color(prediction: torch.Tensor) -> torch.Tensor:
-    batch, _, height, width = prediction.shape
-    color_image = torch.zeros((batch, 3, height, width), dtype=torch.uint8)
-
-    for train_id, color in train_id_to_color.items():
-        mask = prediction[:, 0] == train_id
-        for i in range(3):
-            color_image[:, i][mask] = color[i]
-
-    return color_image
 
 def get_args_parser():
     parser = ArgumentParser("Training script for a PyTorch U-Net model")
@@ -44,9 +35,7 @@ def get_args_parser():
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
-
     return parser
-
 
 def main(args):
     # Initialize wandb for logging
@@ -126,7 +115,7 @@ def main(args):
         return 1 - dice.mean()
 
     criterion = lambda output, target: nn.CrossEntropyLoss(ignore_index=255)(output, target) + 0.3 * dice_loss(output, target)
-    
+
     # Define the optimizer
     from torch.optim.lr_scheduler import ReduceLROnPlateau
     optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
@@ -189,8 +178,13 @@ def main(args):
                 loss = criterion(outputs, labels)
                 losses.append(loss.item())
 
-                if i == 0:
-                    predictions = outputs.softmax(1).argmax(1)
+                # Compute Dice Score for the batch
+                predictions = outputs.softmax(1).argmax(1)
+                intersection = torch.sum((predictions == labels) * (labels != 255))  # Exclude ignored classes
+                union = torch.sum((predictions != 255)) + torch.sum((labels != 255))
+                dice_score = (2.0 * intersection) / union if union > 0 else 1.0
+
+                if i == 0:  # Log the first batch of predictions
                     predictions = predictions.unsqueeze(1)
                     labels = labels.unsqueeze(1)
 
@@ -208,10 +202,14 @@ def main(args):
                         "labels": [wandb.Image(labels_img)],
                     }, step=(epoch + 1) * len(train_dataloader) - 1)
 
-            valid_loss = sum(losses) / len(losses)
-            wandb.log({"valid_loss": valid_loss, "epoch": epoch + 1})
+                # Log the validation loss and dice score for each batch
+                wandb.log({
+                    "valid_loss": sum(losses) / len(losses),
+                    "dice_score": dice_score.item(),
+                }, step=(epoch + 1) * len(train_dataloader) - 1)
 
             # Early stopping logic
+            valid_loss = sum(losses) / len(losses)
             if valid_loss < best_valid_loss:
                 best_valid_loss = valid_loss
                 patience_counter = 0
@@ -223,16 +221,6 @@ def main(args):
                 break
 
             scheduler.step(valid_loss)
-
-            # Log Dice Score
-            predictions = outputs.softmax(1).argmax(1)
-            intersection = torch.sum((predictions == labels) * (labels != 255))
-            union = torch.sum((predictions != 255)) + torch.sum((labels != 255))
-            dice_score = (2.0 * intersection) / union if union > 0 else 1.0
-
-            wandb.log({
-                "dice_score": dice_score.item(),
-            }, step=(epoch + 1) * len(train_dataloader) - 1)
 
             # Save the best model
             if valid_loss < best_valid_loss:
