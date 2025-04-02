@@ -113,3 +113,120 @@ def main(args):
 
         dice = (2. * intersection + smooth) / (union + smooth)
         return 1 - dice.mean()
+
+    criterion = lambda output, target: nn.CrossEntropyLoss(ignore_index=255)(output, target) + 0.3 * dice_loss(output, target)
+
+    # Define the optimizer
+    from torch.optim.lr_scheduler import ReduceLROnPlateau
+    optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=5, factor=0.5, verbose=True)
+
+    # Training loop
+    best_valid_loss = float('inf')
+    current_best_model_path = None
+    for epoch in range(args.epochs):
+        print(f"Epoch {epoch + 1:04}/{args.epochs:04}")
+
+        start_epoch_time = time.time()  # Start time for epoch
+
+        # Training
+        model.train()
+        for i, (images, labels) in enumerate(train_dataloader):
+            labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
+            images, labels = images.to(device), labels.to(device)
+
+            labels = labels.long().squeeze(1)  # Remove channel dimension
+            labels[labels == 255] = 0
+
+            optimizer.zero_grad()
+            with torch.amp.autocast("cuda"):  # Mixed precision
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+            
+            scaler.scale(loss).backward()  # Backprop with scaled gradients
+            scaler.step(optimizer)  # Update optimizer
+            scaler.update()  # Update scaler for next iteration
+
+            # Log metrics
+            wandb.log({
+                "train_loss": loss.item(),
+                "learning_rate": optimizer.param_groups[0]['lr'],
+                "epoch": epoch + 1,
+                "step": epoch * len(train_dataloader) + i
+            })
+
+        # Log epoch time
+        epoch_time = time.time() - start_epoch_time
+        wandb.log({
+            "epoch_time": epoch_time,
+        })
+
+        # Validation
+        model.eval()
+        with torch.no_grad():
+            losses = []
+            for i, (images, labels) in enumerate(valid_dataloader):
+                labels = convert_to_train_id(labels)
+                images, labels = images.to(device), labels.to(device)
+
+                labels = labels.long().squeeze(1)
+                labels[labels == 255] = 0
+
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+                losses.append(loss.item())
+
+                # Compute Dice Score for the batch
+                predictions = outputs.softmax(1).argmax(1)
+                intersection = torch.sum((predictions == labels) * (labels != 255))  # Exclude ignored classes
+                union = torch.sum((predictions != 255)) + torch.sum((labels != 255))
+                dice_score = (2.0 * intersection) / union if union > 0 else 1.0
+
+                # Log the validation loss and dice score for each batch
+                wandb.log({
+                    "valid_loss": sum(losses) / len(losses),
+                    "dice_score": dice_score.item(),
+                }, step=(epoch + 1) * len(train_dataloader) - 1)
+
+            # Early stopping logic
+            valid_loss = sum(losses) / len(losses)
+            if valid_loss < best_valid_loss:
+                best_valid_loss = valid_loss
+                patience_counter = 0
+            else:
+                patience_counter += 1
+
+            if patience_counter >= 10:
+                print("Early stopping triggered! Training stopped.")
+                break
+
+            scheduler.step(valid_loss)
+
+            # Save the best model
+            if valid_loss < best_valid_loss:
+                best_valid_loss = valid_loss
+                if current_best_model_path:
+                    os.remove(current_best_model_path)
+                current_best_model_path = os.path.join(
+                    output_dir, 
+                    f"best_model-epoch={epoch:04}-val_loss={valid_loss:04}.pth"
+                )
+                torch.save(model.state_dict(), current_best_model_path)
+
+    print("Training complete!")
+
+    # Save the model
+    torch.save(
+        model.state_dict(),
+        os.path.join(
+            output_dir,
+            f"final_model-epoch={epoch:04}-val_loss={valid_loss:04}.pth"
+        )
+    )
+    wandb.finish()
+
+
+if __name__ == "__main__":
+    parser = get_args_parser()
+    args = parser.parse_args()
+    main(args)
