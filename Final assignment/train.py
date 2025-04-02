@@ -164,9 +164,6 @@ def main(args):
     #    "efficiency/Parameters": params,
     #})
 
-
-
-
     # Define the loss function
     #criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
 
@@ -201,6 +198,9 @@ def main(args):
     current_best_model_path = None
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1:04}/{args.epochs:04}")
+
+           # Start tracking epoch time
+        start_epoch_time = time.time()  # Start time for the epoch
 
         # Training
         model.train()
@@ -241,7 +241,7 @@ def main(args):
             
 #epoch time
 #       
-        start_epoch_time = time.time()  # Start tijd voor epoch
+       # start_epoch_time = time.time()  # Start tijd voor epoch
         epoch_time = time.time() - start_epoch_time  # Bereken tijd na het trainen van de epoch
         wandb.log({
             "epoch_time": epoch_time,
