@@ -1,22 +1,15 @@
-import os
-from argparse import ArgumentParser
-
-import wandb
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import os
+from argparse import ArgumentParser
+import wandb
 import time
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
 from torchvision.utils import make_grid
-from torchvision.transforms.v2 import (
-    Compose,
-    Normalize,
-    Resize,
-    ToImage,
-    ToDtype,
-)
-
+from torchvision.transforms.v2 import Compose, Normalize, Resize, ToImage, ToDtype
 from unet import Model
 
 # Adding mixed precision training support
