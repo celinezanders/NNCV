@@ -165,6 +165,7 @@ def main(args):
         model.eval()
         with torch.no_grad():
             losses = []
+            dice_scores = []  # List to store dice scores for each batch
             for i, (images, labels) in enumerate(valid_dataloader):
                 labels = convert_to_train_id(labels)
                 images, labels = images.to(device), labels.to(device)
@@ -181,15 +182,19 @@ def main(args):
                 intersection = torch.sum((predictions == labels) * (labels != 255))  # Exclude ignored classes
                 union = torch.sum((predictions != 255)) + torch.sum((labels != 255))
                 dice_score = (2.0 * intersection) / union if union > 0 else 1.0
+                dice_scores.append(dice_score.item())  # Append to the list
 
-                # Log the validation loss and dice score for each batch
-                wandb.log({
-                    "valid_loss": sum(losses) / len(losses),
-                    "dice_score": dice_score.item(),
-                }, step=(epoch + 1) * len(train_dataloader) - 1)
+            valid_loss = sum(losses) / len(losses)
+            avg_dice_score = sum(dice_scores) / len(dice_scores)  # Average dice score for the epoch
+
+            # Log the validation loss and dice score
+            wandb.log({
+                "valid_loss": valid_loss,
+                "dice_score": avg_dice_score,  # Log the average dice score
+                "epoch": epoch + 1
+            })
 
             # Early stopping logic
-            valid_loss = sum(losses) / len(losses)
             if valid_loss < best_valid_loss:
                 best_valid_loss = valid_loss
                 patience_counter = 0
@@ -224,7 +229,6 @@ def main(args):
         )
     )
     wandb.finish()
-
 
 if __name__ == "__main__":
     parser = get_args_parser()
